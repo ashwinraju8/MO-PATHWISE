@@ -10,6 +10,7 @@ import multiprocessing
 import multiprocessing.queues
 import dill
 from deap import base, creator, tools, algorithms
+from deap.tools.emo import sortNondominated, assignCrowdingDist
 from functools import partial
 
 import os
@@ -56,7 +57,7 @@ class PathPlanningEnvironment:
 
     def convert_to_graph(self, buffer_size=1):
         G = nx.grid_2d_graph(int(self.width / self.resolution), int(self.height / self.resolution))
-        # Assign a default weight of 1 to all edges
+        # Assign a default weight between 1 and 1.5 to all edges
         for edge in G.edges():
             weight = random.uniform(1, 1.5)
             G[edge[0]][edge[1]]['weight'] = weight
@@ -291,14 +292,26 @@ class EvolutionaryPathPlanner:
         self.crossover_prob = cross_prob  # Example crossover probability
         self.mutation_prob = mut_prob   # Example mutation probability
 
+    # def setup_deap(self):
+    #     creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))  # Minimize both objectives
+    #     creator.create("Individual", list, fitness=creator.FitnessMulti)
+
+    #     self.toolbox = base.Toolbox()
+    #     self.toolbox.register("mate", self.breeding)
+    #     self.toolbox.register("mutate", self.mutation, n_control_points=50)  
+    #     self.toolbox.register("select", tools.selNSGA2)
+    #     # self.toolbox.register("select", tools.selTournamentDCD)
     def setup_deap(self):
-        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, 1.0))  
+        creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))  # Minimize both objectives
         creator.create("Individual", list, fitness=creator.FitnessMulti)
 
         self.toolbox = base.Toolbox()
         self.toolbox.register("mate", self.breeding)
-        self.toolbox.register("mutate", self.mutation, n_control_points=50)  
+        self.toolbox.register("mutate", self.mutation, n_control_points=50)
         self.toolbox.register("select", tools.selNSGA2)
+        self.toolbox.register("evaluate", self.evaluate_individual)
+
+        
 
     def breeding(self, ind1, ind2):
         # Extract control points and weights from each parent
@@ -308,6 +321,31 @@ class EvolutionaryPathPlanner:
         # Average control points (element-wise) and weights
         child_cp = [[(coord1 + coord2) / 2 for coord1, coord2 in zip(pt1, pt2)] for pt1, pt2 in zip(cp1, cp2)]
         child_weights = [(weight1 + weight2) / 2 for weight1, weight2 in zip(w1, w2)]
+
+        
+        # Create NURBS curves for parents
+        parent1_curve = NURBS.Curve()
+        parent1_curve.degree = 3
+        parent1_curve.ctrlpts = ind1[0]  # Control points for parent 1
+        parent1_curve.weights = ind1[1]  # Weights for parent 1
+        parent1_curve.knotvector = utils.generate_knot_vector(parent1_curve.degree, len(parent1_curve.ctrlpts))
+
+        parent2_curve = NURBS.Curve()
+        parent2_curve.degree = 3
+        parent2_curve.ctrlpts = ind2[0]  # Control points for parent 2
+        parent2_curve.weights = ind2[1]  # Weights for parent 2
+        parent2_curve.knotvector = utils.generate_knot_vector(parent2_curve.degree, len(parent2_curve.ctrlpts))
+
+        # Create NURBS curve for child
+        child_curve = NURBS.Curve()
+        child_curve.degree = 3
+        child_curve.ctrlpts = child_cp  # Control points for child
+        child_curve.weights = child_weights  # Weights for child
+        child_curve.knotvector = utils.generate_knot_vector(child_curve.degree, len(child_curve.ctrlpts))
+
+        # Plot original parents and child
+        self.env.plot_paths_on_environment([parent1_curve, parent2_curve, child_curve], is_nurbs=True)
+        
 
         # Construct and return the child individual
         return (child_cp, child_weights)
@@ -327,15 +365,32 @@ class EvolutionaryPathPlanner:
                 mutated_cp.append(c)
             else:
                 step_size = np.exp(tau0 * np.random.normal() + tau * np.random.normal())
-                mutated_cp.append([coord + step_size * np.random.normal(scale=0.5) for coord in c])
+                mutated_cp.append([coord + step_size * np.random.normal(scale=0.1) for coord in c])
 
         # Mutate weights
         mutated_weights = [w + np.exp(tau0 * np.random.normal() + tau * np.random.normal()) * np.random.normal(scale=0.5) for w in weights]
 
+        
+        # Create NURBS curve for original individual
+        original_curve = NURBS.Curve()
+        original_curve.degree = 3
+        original_curve.ctrlpts = individual[0]  # Original control points
+        original_curve.weights = individual[1]  # Original weights
+        original_curve.knotvector = utils.generate_knot_vector(original_curve.degree, len(original_curve.ctrlpts))
+
+        # Create NURBS curve for mutated individual
+        mutated_curve = NURBS.Curve()
+        mutated_curve.degree = 3
+        mutated_curve.ctrlpts = mutated_cp  # Mutated control points
+        mutated_curve.weights = mutated_weights  # Mutated weights
+        mutated_curve.knotvector = utils.generate_knot_vector(mutated_curve.degree, len(mutated_curve.ctrlpts))
+
+        # Plot original individual and mutated version
+        self.env.plot_paths_on_environment([original_curve, mutated_curve], is_nurbs=True)
+        
+
         return [mutated_cp, mutated_weights]
 
-
-    
     def calculate_curvature(self, first_derivative, second_derivative):
         v = np.array(first_derivative)  # Velocity vector (first derivative)
         v_prime = np.array(second_derivative)  # Acceleration vector (second derivative)
@@ -410,71 +465,169 @@ class EvolutionaryPathPlanner:
 
         return distance, inverted_smoothness
 
-    def run_evolution(self, initial_population, max_generations, no_improve_generations):
-        # Use the provided initial population
-        population = initial_population
+    # def run_evolution(self, initial_population, max_generations, no_improve_generations):
+    #     # Use the provided initial population
+    #     population = initial_population
 
+    #     best_fitness = None
+    #     generations_without_improvement = 0
+
+    #     for gen in range(max_generations):
+    #         print(f"Evaluating population for generation {gen + 1}/{max_generations}...")
+
+    #         # Evaluate and assign fitness to each individual
+    #         fitnesses = [self.evaluate_individual(ind) for ind in population]
+    #         for ind, fit in zip(population, fitnesses):
+    #             print(fit)
+    #             ind.fitness.values = fit
+
+    #         # Selection
+    #         offspring = self.toolbox.select(population, len(population))
+    #         # offspring = tools.selBest(population, len(population))
+    #         offspring = list(map(self.toolbox.clone, offspring))
+    #         print("size original: ", len(population))
+    #         print("size offspring: ", len(offspring))
+
+    #         # Breeding and Mutation
+    #         for child1, child2 in zip(offspring[::2], offspring[1::2]):
+    #             if random.random() < self.crossover_prob:
+    #                 original_child1 = copy.deepcopy(child1)
+    #                 original_child2 = copy.deepcopy(child2)
+    #                 self.toolbox.mate(child1, child2)
+
+    #         for mutant in offspring:
+    #             if random.random() < self.mutation_prob:
+    #                 original_mutant = copy.deepcopy(mutant)
+    #                 self.toolbox.mutate(mutant)
+
+    #         # Evaluate the offspring with an invalid fitness
+    #         for ind in [ind for ind in offspring if not ind.fitness.valid]:
+    #             ind.fitness.values = self.evaluate_individual(ind)
+
+    #         # Convert offspring back to NURBS paths for plotting
+    #         nurbs_offspring = []
+    #         for ind in offspring:
+    #             curve = NURBS.Curve()
+    #             curve.degree = 3
+    #             curve.ctrlpts = ind[0]  # Assuming first element is control points
+    #             curve.weights = ind[1]  # Assuming second element is weights
+    #             curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
+    #             nurbs_offspring.append(curve)
+
+    #         # Plot paths at certain generations
+    #         self.env.plot_paths_on_environment(nurbs_offspring, is_nurbs=True)
+
+    #         # Replace the old population with the new offspring
+    #         population[:] = offspring
+
+    #         # Logging and checking improvements
+    #         current_best_fitness = min(ind.fitness.values for ind in population)
+    #         print(f"Generation {gen + 1}: Best Fitness - {current_best_fitness}")
+    #         if best_fitness is None or current_best_fitness < best_fitness:
+    #             best_fitness = current_best_fitness
+    #             generations_without_improvement = 0
+    #         else:
+    #             generations_without_improvement += 1
+
+    #         if generations_without_improvement >= no_improve_generations:
+    #             print(f"No improvement after {no_improve_generations} generations")
+    #             break
+
+    #     return population
+
+    import copy
+
+    def run_evolution(self, initial_population, max_generations, no_improve_limit):
+        # Ensure population size is divisible by 4 for selTournamentDCD
+        while len(initial_population) % 4 != 0:
+            initial_population.append(copy.deepcopy(initial_population[-1]))
+
+        population = initial_population
         best_fitness = None
-        generations_without_improvement = 0
+        no_improve_gen = 0
+
+        # Function to calculate diversity
+        def calculate_diversity(population):
+            unique_individuals = set(map(str, population))
+            return len(unique_individuals)
+        
+        def print_individuals_change(before, after, operation):
+            print(f"Changes due to {operation}:")
+            for i, (ind_before, ind_after) in enumerate(zip(before, after)):
+                if ind_before != ind_after:
+                    print(f"  Individual {i} changed.")
+
+        # Evaluate the initial population
+        invalid_ind = [ind for ind in population if not ind.fitness.valid]
+        fitnesses = self.toolbox.map(self.toolbox.evaluate, invalid_ind)
+        for ind, fit in zip(invalid_ind, fitnesses):
+            ind.fitness.values = fit
 
         for gen in range(max_generations):
-            print(f"Evaluating population for generation {gen + 1}/{max_generations}...")
+            # Diversity and population size tracking
+            diversity = calculate_diversity(population)
+            print(f"Generation {gen + 1}: Population size: {len(population)}, Diversity: {diversity}")
 
-            # Evaluate and assign fitness to each individual
-            fitnesses = [self.evaluate_individual(ind) for ind in population]
-            for ind, fit in zip(population, fitnesses):
-                ind.fitness.values = fit
+            # Non-dominated sorting and crowding distance assignment
+            fronts = sortNondominated(population, len(population), first_front_only=False)
+            for front in fronts:
+                assignCrowdingDist(front)
 
-            # Selection
-            offspring = self.toolbox.select(population, len(population))
+            # Vary the population
+            offspring = tools.selTournamentDCD(population, len(population))
             offspring = list(map(self.toolbox.clone, offspring))
 
-            # Breeding and Mutation
+            # Track changes before and after breeding and mutation
+            breeding_before = copy.deepcopy(offspring)
+            mutation_before = copy.deepcopy(offspring)
+
             for child1, child2 in zip(offspring[::2], offspring[1::2]):
                 if random.random() < self.crossover_prob:
-                    original_child1 = copy.deepcopy(child1)
-                    original_child2 = copy.deepcopy(child2)
                     self.toolbox.mate(child1, child2)
+                    del child1.fitness.values, child2.fitness.values
+
+            print_individuals_change(breeding_before, offspring, "Breeding")
 
             for mutant in offspring:
                 if random.random() < self.mutation_prob:
-                    original_mutant = copy.deepcopy(mutant)
                     self.toolbox.mutate(mutant)
+                    del mutant.fitness.values
 
-            # Evaluate the offspring with an invalid fitness
-            for ind in [ind for ind in offspring if not ind.fitness.valid]:
-                ind.fitness.values = self.evaluate_individual(ind)
+            print_individuals_change(mutation_before, offspring, "Mutation")
 
-            # Convert offspring back to NURBS paths for plotting
-            nurbs_offspring = []
-            for ind in offspring:
-                curve = NURBS.Curve()
-                curve.degree = 3
-                curve.ctrlpts = ind[0]  # Assuming first element is control points
-                curve.weights = ind[1]  # Assuming second element is weights
-                curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
-                nurbs_offspring.append(curve)
+            # Evaluate individuals with an invalid fitness
+            invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
+            invalid_count = len(invalid_ind)
+            print(f"Generation {gen + 1}: Invalid individuals before evaluation: {invalid_count}")
 
-            # Plot paths at certain generations
-            self.env.plot_paths_on_environment(nurbs_offspring, is_nurbs=True)
+            fitnesses = self.toolbox.map(self.toolbox.evaluate, invalid_ind)
+            for ind, fit in zip(invalid_ind, fitnesses):
+                ind.fitness.values = fit
 
-            # Replace the old population with the new offspring
-            population[:] = offspring
+            invalid_count = sum(1 for ind in offspring if not ind.fitness.valid)
+            print(f"Generation {gen + 1}: Invalid individuals after evaluation: {invalid_count}")
 
-            # Logging and checking improvements
-            current_best_fitness = min(ind.fitness.values for ind in population)
-            print(f"Generation {gen + 1}: Best Fitness - {current_best_fitness}")
+            # Check selection process
+            selection_before = copy.deepcopy(population + offspring)
+            population[:] = self.toolbox.select(population + offspring, len(population))
+            print_individuals_change(selection_before, population, "Selection")
+
+            # Checking for improvements
+            current_best_fitness = min(ind.fitness.values[0] for ind in population)
             if best_fitness is None or current_best_fitness < best_fitness:
                 best_fitness = current_best_fitness
-                generations_without_improvement = 0
+                no_improve_gen = 0
             else:
-                generations_without_improvement += 1
+                no_improve_gen += 1
 
-            if generations_without_improvement >= no_improve_generations:
-                print(f"No improvement after {no_improve_generations} generations")
+            if no_improve_gen >= no_improve_limit:
+                print(f"Stopped early due to no improvement over {no_improve_limit} generations.")
                 break
 
+            print(f"Generation {gen + 1}, Best Fitness: {current_best_fitness}")
+
         return population
+
 
 
 
@@ -575,7 +728,8 @@ def main():
         individual = (nurbs_curve.ctrlpts, nurbs_curve.weights)
         initial_population.append(creator.Individual(individual))
 
-    
+    # Testing functions:
+    """
     for idx, nurbs_curve in enumerate(combined_nurbs_paths):
         constraints_passed = epp.check_constraints(nurbs_curve)
         print(f"Path {idx + 1}: Constraints {'passed' if constraints_passed else 'failed'}")
@@ -619,10 +773,11 @@ def main():
 
     # Plot original individual and mutated version
     env.plot_paths_on_environment([individual_for_mutation_curve, mutated_curve], is_nurbs=True)
-    
+    """
+
     # Run the evolutionary algorithm with the initial paths
     print("Running evolutionary algorithm...")
-    final_population = epp.run_evolution(initial_population, max_generations=100, no_improve_generations=10)
+    final_population = epp.run_evolution(initial_population, max_generations=100, no_improve_limit=100)
 
     print("Evolution complete. Processing final population...")
 
