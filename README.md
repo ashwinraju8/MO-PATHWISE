@@ -63,7 +63,7 @@
       </ul>
     </li>
     <li>
-      <a href="#getting-started">Getting Started</a>
+      <a href="#methodology-and-psuedoalgorithm">Methodology And Pseudoalgorithm</a>
       <ul>
         <li><a href="#prerequisites">Prerequisites</a></li>
         <li><a href="#installation">Installation</a></li>
@@ -85,14 +85,22 @@
 
 [![Product Name Screen Shot][product-screenshot]](https://example.com)
 
-There are many great README templates available on GitHub; however, I didn't find one that really suited my needs so I created this enhanced one. I want to create a README template so amazing that it'll be the last one you ever need -- I think this is it.
+This Git Repository encompasses the final project for Algorithmic Motion Plannning at University of Colorado Boulder during the Fall 2023 semester. The project explores the use of Multi-Objective Optimization (MOO) to perform motion planning. Instead of using traditional optimizers like CHOMP, which maximizes a single objective, path smoothness, while performing obstacle avoidance, 
+U(\xi) = f_{\text{smoothness}}(\xi) + f_{\text{obs}}(\xi), the MOO framework looks at multiple objectives while avoiding obstacles. Single objective optimization gives the single best solution for optimizing the criteria, but MOO gives a set of solutions which are all valid and equal in score. 
 
-Here's why:
-* Your time should be focused on creating something amazing. A project that solves a problem and helps others
-* You shouldn't be doing the same tasks over and over like creating a README from scratch
-* You should implement DRY principles to the rest of your life :smile:
+The utility of MOO is demonstrated when mutiple objectives strive to reach their maximum (or minimum) in a constrained space. For example: say a company is awarded a contract to design a vehicle where the customer wants cost to be minimized, and range and payload to be maximized. Maximizing range may result in a vehicle that cannot carry as much payload. And, conversely, maximizing payload may result in a vehicle that cannot go very far. Or, picking high values for both range and payload could lead to a costly design. All are possible realities, and all could be optimal solutions. MOO will give you a set of "Pareto efficient" solutions, where one solution in the set isn't the most dominant. They are all equal in score. So, it is possible for a vehicle with higher range, lower payload, and low cost to be optimal. And, it's also possible for a vehicle with higher payload, lower range, and low cost to also be optimal. The set of all possible Pareto efficient solutions is called a Pareto Front; one is demonstarted in our results below. 
 
-Of course, no one template will serve all projects since your needs may be different. So I'll be adding more in the near future. You may also suggest changes by forking this repo and creating a pull request or opening an issue. Thanks to all the people have contributed to expanding this template!
+Originally, we looked at optimizing path distance and and smoothness. However, we observed that the objectives were not very competitive with each other. 
+
+Our first set of objectives to optimize were: 
+* path distance 
+* path smoothness 
+
+Thus, we chose objectives that were seemingly contentious with eachother:
+* path distance (minimize)
+* safety buffer (distance to obstacles) 
+
+
 
 Use the `BLANK_README.md` to get started.
 
@@ -102,26 +110,46 @@ Use the `BLANK_README.md` to get started.
 
 ### Built With
 
-This section should list any major frameworks/libraries used to bootstrap your project. Leave any add-ons/plugins for the acknowledgements section. Here are a few examples.
 
-* [![Next][Next.js]][Next-url]
-* [![React][React.js]][React-url]
-* [![Vue][Vue.js]][Vue-url]
-* [![Angular][Angular.io]][Angular-url]
-* [![Svelte][Svelte.dev]][Svelte-url]
-* [![Laravel][Laravel.com]][Laravel-url]
-* [![Bootstrap][Bootstrap.com]][Bootstrap-url]
-* [![JQuery][JQuery.com]][JQuery-url]
+* [![NumPy][NumPy-logo]][NumPy-url]
+* [![Matplotlib][Matplotlib-logo]][Matplotlib-url]
+* [![NetworkX][NetworkX-logo]][NetworkX-url]
+* [![Geomdl][Geomdl-logo]][Geomdl-url]
+* [![SciPy][SciPy-logo]][SciPy-url]
+* [![DEAP][DEAP-logo]][DEAP-url]
+
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
 
 
-<!-- GETTING STARTED -->
-## Getting Started
+<!-- Methodology And Pseudoalgorithm -->
+## Methodology And Pseudoalgorithm
 
-This is an example of how you may give instructions on setting up your project locally.
-To get a local copy up and running follow these simple example steps.
+Run Evolutionary Algorithm: 
+  input parameter: Initial Population (16)
+  input parameter: Max Number of Generations (100)
+  input parameter: No Improvement Limit (10)
+  Part 1:
+  1. Set Population equal to the Initial Population 
+  2. Initialize Best Fitness Score to zero 
+  3. Initialize a counter for No Improvement Count to zero 
+  Part 2: 
+  1. Assign Best Fitness Score to the Population 
+  Part 3: 
+  1. Do the following until Max Generation is reach:
+  2. Select the best individuals from the population as the Offspring
+  3. If the probability of breeding is greater than a  randomly generated probability breed two individuals from the offspring  (child) and replace the parents from the offspring with the two children 
+  4. Take two individuals from the offspring and mutate. Replace parents in offspring by the mutated individuals (children)
+  5. Delete fitness scores of the changed individuals and calculate new fitness values
+  6. Combine the original population with the offspring 
+  7. Select the best individuals from the combined population. Only retain the same number of the original population 
+  8. Loop through the population to check if the current fitness is better than the previous Best Fitness Score 
+  9. If true: redefine Best Fitness Score to the current fitness score and set No Improvement Limit to zero
+  10. If False: count +1 to the No Improvement Limit
+  11. IF the No Improvement Limit Count > No Improvement Limit, break the loop 
+
+  
 
 ### Prerequisites
 
@@ -222,7 +250,13 @@ Project Link: [https://github.com/your_username/repo_name](https://github.com/yo
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 
-Use this space to list resources you find helpful and would like to give credit to. I've included a few of my favorites to kick things off!
+[1] Baraa M. Abed and Wesam M. Jasim. Hybrid approach for multi-objective optimization path planning with
+moving target. Indonesian Journal of Electrical Engineering and Computer Science, 29(1):348–357, 2023.
+[2] V. S. Ajith and K. G. Jolly. Hybrid optimization based multi-objective path planning framework for unmanned
+aerial vehicles. Cybernetics and Systems, 54(8):1397–1423, 2023. This study presents a novel Multi-Objective
+Path Planning (MOPP) framework for optimizing journey distance and safety of unmanned aerial vehicles
+(UAVs) in low-altitude urban environments. The framework utilizes a hybrid Deer Hunter Updated Whale
+Optimization (DHUWO) algorithm and showcases improved performance over existing models.
 
 * [Choose an Open Source License](https://choosealicense.com)
 * [GitHub Emoji Cheat Sheet](https://www.webpagefx.com/tools/emoji-cheat-sheet)
