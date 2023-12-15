@@ -65,8 +65,8 @@
     <li>
       <a href="#methodology-and-psuedoalgorithm">Methodology And Pseudoalgorithm</a>
       <ul>
-        <li><a href="#prerequisites">Prerequisites</a></li>
-        <li><a href="#installation">Installation</a></li>
+        <li><a href="#psuedoalgorithm">Psuedoalgorithm</a></li>
+        <li><a href="#methodology">Methodology</a></li>
       </ul>
     </li>
     <li><a href="#usage">Usage</a></li>
@@ -108,15 +108,16 @@ Use the `BLANK_README.md` to get started.
 
 
 
+
 ### Built With
 
+- [NumPy](NumPy-url)
+- [Matplotlib](Matplotlib-url)
+- [NetworkX](NetworkX-url)
+- [Geomdl](Geomdl-url)
+- [SciPy](SciPy-url)
+- [DEAP](DEAP-url)
 
-* [![NumPy][NumPy-logo]][NumPy-url]
-* [![Matplotlib][Matplotlib-logo]][Matplotlib-url]
-* [![NetworkX][NetworkX-logo]][NetworkX-url]
-* [![Geomdl][Geomdl-logo]][Geomdl-url]
-* [![SciPy][SciPy-logo]][SciPy-url]
-* [![DEAP][DEAP-logo]][DEAP-url]
 
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -124,7 +125,10 @@ Use the `BLANK_README.md` to get started.
 
 
 <!-- Methodology And Pseudoalgorithm -->
-## Methodology And Pseudoalgorithm
+## Methodology & Pseudoalgorithm
+
+
+### Pseudoalgorithm
 
 Run Evolutionary Algorithm: 
   input parameter: Initial Population (16)
@@ -149,35 +153,44 @@ Run Evolutionary Algorithm:
   10. If False: count +1 to the No Improvement Limit
   11. IF the No Improvement Limit Count > No Improvement Limit, break the loop 
 
-  
+### Methodology
 
-### Prerequisites
+Understanding data structures is crucial to understanding the evolutionary algorithm. Firstly, let's define the structure of the input parameter: Initial Population. 
 
-This is an example of how to list things you need to use the software and how to install them.
-* npm
-  ```sh
-  npm install npm@latest -g
-  ```
+Initial Population: Starts with 16 individuals, where a an individual is defined as: 
 
-### Installation
+\[ I = \{z, \sigma\} \]
 
-_Below is an example of how you can instruct your audience on installing and setting up your app. This template doesn't rely on any external dependencies or services._
+The individuals are comprised of design variables, controls points and weights, and sigmas (step sizes), each of which correspond to the design variables. So, the dimension of one individual is 1 x 6 x number of controls points. It is the sigmas that are being mutated or (sometimes) breeded at every generation of a new population. 
 
-1. Get a free API Key at [https://example.com](https://example.com)
-2. Clone the repo
-   ```sh
-   git clone https://github.com/your_username_/Project-Name.git
-   ```
-3. Install NPM packages
-   ```sh
-   npm install
-   ```
-4. Enter your API in `config.js`
-   ```js
-   const API_KEY = 'ENTER YOUR API';
-   ```
+\[ z = \begin{bmatrix}
+w_0 & x_1 & y_1 & w_1 & \ldots & x_{n-1} & y_{n-1} & w_{n-1} & w_n
+\end{bmatrix} \]
 
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
+\[ \sigma = \begin{bmatrix}
+\sigma_{x0} & \sigma_{y0} & \sigma_{w0} & \sigma_{x1} & \ldots & \sigma_{x(n-1)} & \sigma_{y(n-1)} & \sigma_{w(n-1)} & w_n
+\end{bmatrix} \]
+
+<p>The Breeding operation averages the step sizes of two randomly selected individuals \(I_{i,t}\) and \(I_{j,t}\) at generation \(t\):</p>
+
+\[ \sigma_{i,t+1} = \sigma_{j,t+1} = 0.5 (\sigma_{i,t} + \sigma_{j,t}) \]
+
+This operation occurs only if the probability of breeding exceeds a randomly generated probabiity. 
+
+<p>The Mutation operation occurs at every generation of a new population. The mutation of the sigmas of two randomly selected individuals \(I_{i,t}\) and \(I_{j,t}\) at generation \(t\):</p>
+
+\[ \sigma_{s,t+1} = e^{\tau_0 \xi_0} \begin{bmatrix}
+\sigma_{1,t} e^{\tau \xi_1} & \ldots & \sigma_{D,t} e^{\tau \xi_D}
+\end{bmatrix}^T \]
+
+Once the sigmas are mutated and/or breeded, the newly generated Individuals are:
+
+\[ I_{r,t+1} = \begin{bmatrix}
+w_{0,t} + \sigma_{1,t+1}\xi_1 + \ldots + w_{np,t} + \sigma_{D,t+1}\xi_D
+\end{bmatrix}^T \]
+
+
+
 
 
 
