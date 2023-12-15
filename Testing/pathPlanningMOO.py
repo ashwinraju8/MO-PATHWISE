@@ -292,15 +292,6 @@ class EvolutionaryPathPlanner:
         self.crossover_prob = cross_prob  # Example crossover probability
         self.mutation_prob = mut_prob   # Example mutation probability
 
-    # def setup_deap(self):
-    #     creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))  # Minimize both objectives
-    #     creator.create("Individual", list, fitness=creator.FitnessMulti)
-
-    #     self.toolbox = base.Toolbox()
-    #     self.toolbox.register("mate", self.breeding)
-    #     self.toolbox.register("mutate", self.mutation, n_control_points=50)  
-    #     self.toolbox.register("select", tools.selNSGA2)
-    #     # self.toolbox.register("select", tools.selTournamentDCD)
     def setup_deap(self):
         creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))  # Minimize both objectives
         creator.create("Individual", list, fitness=creator.FitnessMulti)
@@ -310,9 +301,7 @@ class EvolutionaryPathPlanner:
         self.toolbox.register("mutate", self.mutation, n_control_points=50)
         self.toolbox.register("select", tools.selNSGA2)
         self.toolbox.register("evaluate", self.evaluate_individual)
-
-        
-
+  
     def breeding(self, ind1, ind2):
         # Extract control points, weights, and sigma values from each parent
         cp1, w1, sigmaxy1, sigmaw1 = ind1
@@ -324,20 +313,26 @@ class EvolutionaryPathPlanner:
             [(y1 + y2) / 2 for y1, y2 in zip(sigmaxy1[1], sigmaxy2[1])]
         )
 
-        child_sigma_w = [(w1 + w2) / 2 for w1, w2 in zip(sigmaxy1[0], sigmaxy2[0])]
+        child_sigma_w = [(w1 + w2) / 2 for w1, w2 in zip(sigmaw1, sigmaw2)]
 
         # Update the individuals in-place
         ind1[:] = [cp1, w1, child_sigma_xy, child_sigma_w]
-        ind2[:] = [cp2, w2, child_sigma_xy.copy(), child_sigma_w.copy()]
-        
 
+        # Create a copy of each list in the child_sigma_xy tuple
+        child_sigma_xy_copy = (child_sigma_xy[0][:], child_sigma_xy[1][:])
+
+        # Use the copied tuple for ind2
+        ind2[:] = [cp2, w2, child_sigma_xy_copy, child_sigma_w[:]]
+            
     def mutation(self, individual, n_control_points):
         # Unpack individual's attributes
-        (ctrlpts_x, ctrlpts_y), weights, (sigmaxy_x, sigmaxy_y), sigmaw = individual
+        ctrlpts, weights, sigmaxy, sigmaw = individual
+        ctrlpts_x, ctrlpts_y = zip(*ctrlpts)  # Unpack control points into x and y lists
+        sigmaxy_x, sigmaxy_y = sigmaxy  # Unpack sigmaxy into x and y lists
 
         # Calculate mutation parameters
         D = 3 * n_control_points - 4  # Dimensionality
-        l = 1.0  # Hyperparameter
+        l = 0.5  # Hyperparameter
         tau0 = l / np.sqrt(2 * D)  # Global step size scaling
         tau = l / np.sqrt(2 * np.sqrt(D))  # Local step size scaling
 
@@ -358,15 +353,29 @@ class EvolutionaryPathPlanner:
         mutated_sigmaw = [sigma * np.exp(tau * np.random.normal()) for sigma in sigmaw]
 
         # Apply mutation to control points using mutated step sizes
-        mutated_ctrlpts_x = [ctrlpt + global_step * sigma * np.random.normal() for ctrlpt, sigma in zip(ctrlpts_x, mutated_sigmaxy_x)]
-        mutated_ctrlpts_y = [ctrlpt + global_step * sigma * np.random.normal() for ctrlpt, sigma in zip(ctrlpts_y, mutated_sigmaxy_y)]
+        mutated_ctrlpts_x = [ctrlpts_x[0]] + [ctrlpt + global_step * sigma * np.random.normal() for ctrlpt, sigma in zip(ctrlpts_x[1:-1], mutated_sigmaxy_x)] + [ctrlpts_x[-1]]
+        mutated_ctrlpts_y = [ctrlpts_y[0]] + [ctrlpt + global_step * sigma * np.random.normal() for ctrlpt, sigma in zip(ctrlpts_y[1:-1], mutated_sigmaxy_y)] + [ctrlpts_y[-1]]
 
         # Apply mutation to weights
         mutated_weights = [weight + global_step * sigma * np.random.normal() for weight, sigma in zip(weights, mutated_sigmaw)]
 
         # Update the individual with mutated values
-        individual[:] = [(mutated_ctrlpts_x, mutated_ctrlpts_y), mutated_weights, (mutated_sigmaxy_x, mutated_sigmaxy_y), mutated_sigmaw]
+        mutated_ctrlpts = list(zip(mutated_ctrlpts_x, mutated_ctrlpts_y))
+        individual[:] = [mutated_ctrlpts, mutated_weights, (mutated_sigmaxy_x, mutated_sigmaxy_y), mutated_sigmaw]
 
+    def distance_to_nearest_obstacle(self, curve, num_samples=100):
+        min_distance = float('inf')
+
+        for i in range(num_samples):
+            t = i / float(num_samples - 1)
+            point = curve.evaluate_single(t)
+            
+            # Calculate distance to each obstacle for this point
+            for ox, oy, radius in self.env.obstacles:
+                distance = np.sqrt((point[0] - ox) ** 2 + (point[1] - oy) ** 2) - radius
+                min_distance = min(min_distance, distance)
+
+        return max(min_distance, 0)  # Ensure distance is non-negative
 
     def calculate_curvature(self, first_derivative, second_derivative):
         v = np.array(first_derivative)  # Velocity vector (first derivative)
@@ -440,85 +449,21 @@ class EvolutionaryPathPlanner:
         smoothness = self.calculate_smoothness(curve)
         inverted_smoothness = 1 / smoothness if smoothness != 0 else float('inf')  # Avoid division by zero
 
-        return distance, inverted_smoothness
+        safety_distance = self.distance_to_nearest_obstacle(curve)
+        inverted_safety_distance = 1 / safety_distance if safety_distance != 0 else float('inf')  # Avoid division by zero
 
-    # def run_evolution(self, initial_population, max_generations, no_improve_generations):
-    #     # Use the provided initial population
-    #     population = initial_population
-
-    #     best_fitness = None
-    #     generations_without_improvement = 0
-
-    #     for gen in range(max_generations):
-    #         print(f"Evaluating population for generation {gen + 1}/{max_generations}...")
-
-    #         # Evaluate and assign fitness to each individual
-    #         fitnesses = [self.evaluate_individual(ind) for ind in population]
-    #         for ind, fit in zip(population, fitnesses):
-    #             print(fit)
-    #             ind.fitness.values = fit
-
-    #         # Selection
-    #         offspring = self.toolbox.select(population, len(population))
-    #         # offspring = tools.selBest(population, len(population))
-    #         offspring = list(map(self.toolbox.clone, offspring))
-    #         print("size original: ", len(population))
-    #         print("size offspring: ", len(offspring))
-
-    #         # Breeding and Mutation
-    #         for child1, child2 in zip(offspring[::2], offspring[1::2]):
-    #             if random.random() < self.crossover_prob:
-    #                 original_child1 = copy.deepcopy(child1)
-    #                 original_child2 = copy.deepcopy(child2)
-    #                 self.toolbox.mate(child1, child2)
-
-    #         for mutant in offspring:
-    #             if random.random() < self.mutation_prob:
-    #                 original_mutant = copy.deepcopy(mutant)
-    #                 self.toolbox.mutate(mutant)
-
-    #         # Evaluate the offspring with an invalid fitness
-    #         for ind in [ind for ind in offspring if not ind.fitness.valid]:
-    #             ind.fitness.values = self.evaluate_individual(ind)
-
-    #         # Convert offspring back to NURBS paths for plotting
-    #         nurbs_offspring = []
-    #         for ind in offspring:
-    #             curve = NURBS.Curve()
-    #             curve.degree = 3
-    #             curve.ctrlpts = ind[0]  # Assuming first element is control points
-    #             curve.weights = ind[1]  # Assuming second element is weights
-    #             curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
-    #             nurbs_offspring.append(curve)
-
-    #         # Plot paths at certain generations
-    #         self.env.plot_paths_on_environment(nurbs_offspring, is_nurbs=True)
-
-    #         # Replace the old population with the new offspring
-    #         population[:] = offspring
-
-    #         # Logging and checking improvements
-    #         current_best_fitness = min(ind.fitness.values for ind in population)
-    #         print(f"Generation {gen + 1}: Best Fitness - {current_best_fitness}")
-    #         if best_fitness is None or current_best_fitness < best_fitness:
-    #             best_fitness = current_best_fitness
-    #             generations_without_improvement = 0
-    #         else:
-    #             generations_without_improvement += 1
-
-    #         if generations_without_improvement >= no_improve_generations:
-    #             print(f"No improvement after {no_improve_generations} generations")
-    #             break
-
-    #     return population
-
+        # return distance, inverted_smoothness
+        return distance, inverted_safety_distance
+    
     def run_evolution(self, initial_population, max_generations, no_improve_limit):
         # Ensure population size is divisible by 4 for selTournamentDCD
         while len(initial_population) % 4 != 0:
             initial_population.append(copy.deepcopy(initial_population[-1]))
 
         population = initial_population
-        best_fitness = None
+
+        # Initialize variables for tracking Pareto front
+        all_pareto_fronts = []
         no_improve_gen = 0
 
         # Function to calculate diversity
@@ -529,7 +474,15 @@ class EvolutionaryPathPlanner:
         def print_individuals_change(before, after, operation):
             print(f"Changes due to {operation}:")
             for i, (ind_before, ind_after) in enumerate(zip(before, after)):
-                if ind_before[0] != ind_after[0] or ind_before[1] != ind_after[1]:  # Compare control points and weights
+                # Unpack the control points, weights, and sigma values
+                ctrlpts_before, weights_before, sigmaxy_before, sigmaw_before = ind_before
+                ctrlpts_after, weights_after, sigmaxy_after, sigmaw_after = ind_after
+
+                # Check for changes in control points, weights, or sigma values
+                if (ctrlpts_before != ctrlpts_after or 
+                    weights_before != weights_after or 
+                    sigmaxy_before != sigmaxy_after or 
+                    sigmaw_before != sigmaw_after):
                     print(f"  Individual {i} changed.")
 
         # Evaluate the initial population
@@ -550,16 +503,11 @@ class EvolutionaryPathPlanner:
             # Vary the population
             offspring = tools.selTournamentDCD(population, len(population))
             offspring = list(map(self.toolbox.clone, offspring))
-            print_individuals_change(population, offspring, "selTournament")
+            print_individuals_change(population, offspring, "selTournamentDCD")
 
             # Track changes before and after breeding and mutation
             breeding_before = copy.deepcopy(offspring)
             mutation_before = copy.deepcopy(offspring)
-
-            # # Debug: Print individual's control points before modification
-            # print("Before Breeding & Mutation:")
-            # for idx, ind in enumerate(offspring):
-            #     print(f"Individual {idx} CP: {ind[0]}")  # Assuming control points are the first element
 
             for child1, child2 in zip(offspring[::2], offspring[1::2]):
                 if random.random() < self.crossover_prob:
@@ -569,10 +517,9 @@ class EvolutionaryPathPlanner:
             print_individuals_change(breeding_before, offspring, "Breeding")
 
             for mutant in offspring:
-                if random.random() < self.mutation_prob:
-                    print("Mutating")
-                    self.toolbox.mutate(mutant)
-                    del mutant.fitness.values
+                print("Mutating")
+                self.toolbox.mutate(mutant)
+                del mutant.fitness.values
 
             print_individuals_change(mutation_before, offspring, "Mutation")
 
@@ -588,37 +535,60 @@ class EvolutionaryPathPlanner:
             invalid_count = sum(1 for ind in offspring if not ind.fitness.valid)
             print(f"Generation {gen + 1}: Invalid individuals after evaluation: {invalid_count}")
 
-            # Convert offspring back to NURBS paths for plotting
-            nurbs_offspring = []
-            for ind in offspring:
-                curve = NURBS.Curve()
-                curve.degree = 3
-                curve.ctrlpts = ind[0]  # Assuming first element is control points
-                curve.weights = ind[1]  # Assuming second element is weights
-                curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
-                nurbs_offspring.append(curve)
+            # # Convert offspring back to NURBS paths for plotting
+            # nurbs_offspring = []
+            # for ind in offspring:
+            #     curve = NURBS.Curve()
+            #     curve.degree = 3
+            #     curve.ctrlpts = ind[0]  # Assuming first element is control points
+            #     curve.weights = ind[1]  # Assuming second element is weights
+            #     curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
+            #     nurbs_offspring.append(curve)
 
-            # Plot paths at certain generations
-            self.env.plot_paths_on_environment(nurbs_offspring, is_nurbs=True)
+            # # Plot paths at certain generations
+            # self.env.plot_paths_on_environment(nurbs_offspring, is_nurbs=True)
 
             # Check selection process
             selection_before = copy.deepcopy(population + offspring)
             population[:] = self.toolbox.select(population + offspring, len(population))
             print_individuals_change(selection_before, population, "Selection")
 
-            # Checking for improvements
-            current_best_fitness = min(ind.fitness.values[0] for ind in population)
-            if best_fitness is None or current_best_fitness < best_fitness:
-                best_fitness = current_best_fitness
+            # Get the current Pareto front
+            current_pareto_front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
+
+            # Save current Pareto front
+            all_pareto_fronts.append(current_pareto_front)
+
+            # Check for improvement compared to the previous Pareto front (if there is one)
+            if gen > 0 and any(ind.fitness.dominates(prev_ind.fitness) for ind in current_pareto_front for prev_ind in all_pareto_fronts[-2]):
                 no_improve_gen = 0
             else:
                 no_improve_gen += 1
 
+            # Early stopping condition if no improvement in Pareto front for a set number of generations
             if no_improve_gen >= no_improve_limit:
                 print(f"Stopped early due to no improvement over {no_improve_limit} generations.")
                 break
 
-            print(f"Generation {gen + 1}, Best Fitness: {current_best_fitness}")
+            print(f"Generation {gen + 1}, Pareto Front Size: {len(current_pareto_front)}")
+
+        # Plotting Pareto fronts at the end of the evolution
+        total_generations = len(all_pareto_fronts)
+        selected_generations = np.linspace(0, total_generations - 1, 5, dtype=int)
+
+        # Plotting selected Pareto fronts
+        for gen_index in selected_generations:
+            pareto_front = all_pareto_fronts[gen_index]
+            # Extract fitness values for each individual in the Pareto front
+            front = np.array([ind.fitness.values for ind in pareto_front])
+            # Plot
+            plt.scatter(front[:, 0], front[:, 1], label=f"Gen {gen_index + 1}")
+
+        plt.title("Selected Pareto Fronts Over Generations")
+        plt.xlabel("Objective 1")
+        plt.ylabel("Objective 2")
+        plt.legend()
+        plt.show()
 
         return population
 
@@ -784,10 +754,10 @@ def main():
 
     # Run the evolutionary algorithm with the initial paths
     print("Running evolutionary algorithm...")
-    final_population = epp.run_evolution(initial_population, max_generations=100, no_improve_limit=100)
+    final_population = epp.run_evolution(initial_population, max_generations=100, no_improve_limit=20)
 
     print("Evolution complete. Processing final population...")
-
+    
 
 
 
