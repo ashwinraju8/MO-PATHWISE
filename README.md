@@ -203,8 +203,7 @@ Project Link: [https://github.com/your_username/repo_name](https://github.com/yo
 <p>
 [1] Baraa M. Abed and Wesam M. Jasim. Hybrid approach for multi-objective optimization path planning with
 moving target. Indonesian Journal of Electrical Engineering and Computer Science, 29(1):348–357, 2023.<br>
-<p class="line-space">This is on a new line with space below.</p>
-
+<p><br></p>
 [2] V. S. Ajith and K. G. Jolly. Hybrid optimization based multi-objective path planning framework for unmanned
 aerial vehicles. Cybernetics and Systems, 54(8):1397–1423, 2023. This study presents a novel Multi-Objective
 Path Planning (MOPP) framework for optimizing journey distance and safety of unmanned aerial vehicles
