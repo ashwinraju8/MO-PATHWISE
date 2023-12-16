@@ -19,12 +19,7 @@
 *** for contributors-url, forks-url, etc. This is an optional, concise syntax you may use.
 *** https://www.markdownguide.org/basic-syntax/#reference-style-links
 -->
-[![Contributors][contributors-shield]][contributors-url]
-[![Forks][forks-shield]][forks-url]
-[![Stargazers][stars-shield]][stars-url]
-[![Issues][issues-shield]][issues-url]
-[![MIT License][license-shield]][license-url]
-[![LinkedIn][linkedin-shield]][linkedin-url]
+
 
 
 
@@ -58,10 +53,6 @@
         <li><a href="#methodology">Methodology</a></li>
       </ul>
     </li>
-    <li><a href="#usage">Usage</a></li>
-    <li><a href="#roadmap">Roadmap</a></li>
-    <li><a href="#contributing">Contributing</a></li>
-    <li><a href="#license">License</a></li>
     <li><a href="#contact">Contact</a></li>
     <li><a href="#acknowledgments">Acknowledgments</a></li>
   </ol>
@@ -190,9 +181,11 @@ _For more examples, please refer to the [Documentation](https://example.com)_
 <!-- CONTACT -->
 ## Contact
 
-Your Name - [@your_twitter](https://twitter.com/your_username) - email@example.com
+Ashwin Raju (Team Lead) - [@linkein](https://www.linkedin.com/in/rajuashwin/) - Ashwin.Raju@colorado.edu
 
-Project Link: [https://github.com/your_username/repo_name](https://github.com/your_username/repo_name)
+Carlos Chavez (Team Member) - Carlos.Chavez@colorado.edu
+
+Project Link: [https://github.com/ashwinraju8/MO-PATHWISE?tab=readme-ov-file](https://github.com/ashwinraju8/MO-PATHWISE?tab=readme-ov-file)
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
