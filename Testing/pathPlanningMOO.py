@@ -15,6 +15,13 @@ from functools import partial
 
 import os
 import pickle
+import datetime
+
+
+# Global variables
+TIMESTAMP = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+IMAGE_DIRECTORY = os.path.join("..", "images", TIMESTAMP)
+os.makedirs(IMAGE_DIRECTORY, exist_ok=True)
 
 
 def multiprocessing_setup():
@@ -280,17 +287,15 @@ class PathPlanningEnvironment:
             # Plot the path or NURBS curve
             ax.plot(x_coords, y_coords, color=color, linewidth=2, label=f'Path {idx + 1}')
 
-        ax.legend()
-        plt.show()
+        # ax.legend()
 
 
 
 class EvolutionaryPathPlanner:
-    def __init__(self, path_planning_environment, cross_prob, mut_prob):
+    def __init__(self, path_planning_environment, cross_prob):
         self.env = path_planning_environment
         self.setup_deap()
-        self.crossover_prob = cross_prob  # Example crossover probability
-        self.mutation_prob = mut_prob   # Example mutation probability
+        self.crossover_prob = cross_prob  
 
     def setup_deap(self):
         creator.create("FitnessMulti", base.Fitness, weights=(-1.0, -1.0))  # Minimize both objectives
@@ -414,15 +419,15 @@ class EvolutionaryPathPlanner:
 
             # Check if the point is in an obstacle or out of bounds
             if self.env.is_point_in_obstacle(point) or not self.env.is_point_within_bounds(point):
-                if self.env.is_point_in_obstacle(point):
-                    print("in obstacle")
-                if not self.env.is_point_within_bounds(point):
-                    print("out of bounds")
+                # if self.env.is_point_in_obstacle(point):
+                #     print("in obstacle")
+                # if not self.env.is_point_within_bounds(point):
+                #     print("out of bounds")
                 return False
 
             # Check for line segment intersection with obstacles, if there's a last point
             if last_point is not None and self.env.is_line_intersecting_obstacles(last_point, point):
-                print("line intersection")
+                # print("line intersection")
                 return False
 
             last_point = point
@@ -503,7 +508,7 @@ class EvolutionaryPathPlanner:
             # Vary the population
             offspring = tools.selTournamentDCD(population, len(population))
             offspring = list(map(self.toolbox.clone, offspring))
-            print_individuals_change(population, offspring, "selTournamentDCD")
+            # print_individuals_change(population, offspring, "selTournamentDCD")
 
             # Track changes before and after breeding and mutation
             breeding_before = copy.deepcopy(offspring)
@@ -514,34 +519,33 @@ class EvolutionaryPathPlanner:
                     self.toolbox.mate(child1, child2)
                     del child1.fitness.values, child2.fitness.values
 
-            print_individuals_change(breeding_before, offspring, "Breeding")
+            # print_individuals_change(breeding_before, offspring, "Breeding")
 
             for mutant in offspring:
-                print("Mutating")
                 self.toolbox.mutate(mutant)
                 del mutant.fitness.values
 
-            print_individuals_change(mutation_before, offspring, "Mutation")
+            # print_individuals_change(mutation_before, offspring, "Mutation")
 
             # Evaluate individuals with an invalid fitness
             invalid_ind = [ind for ind in offspring if not ind.fitness.valid]
             invalid_count = len(invalid_ind)
-            print(f"Generation {gen + 1}: Invalid individuals before evaluation: {invalid_count}")
+            # print(f"Generation {gen + 1}: Invalid individuals before evaluation: {invalid_count}")
 
             fitnesses = self.toolbox.map(self.toolbox.evaluate, invalid_ind)
             for ind, fit in zip(invalid_ind, fitnesses):
                 ind.fitness.values = fit
 
             invalid_count = sum(1 for ind in offspring if not ind.fitness.valid)
-            print(f"Generation {gen + 1}: Invalid individuals after evaluation: {invalid_count}")
+            # print(f"Generation {gen + 1}: Invalid individuals after evaluation: {invalid_count}")
 
             # # Convert offspring back to NURBS paths for plotting
             # nurbs_offspring = []
             # for ind in offspring:
             #     curve = NURBS.Curve()
             #     curve.degree = 3
-            #     curve.ctrlpts = ind[0]  # Assuming first element is control points
-            #     curve.weights = ind[1]  # Assuming second element is weights
+            #     curve.ctrlpts = ind[0]  # first element is control points
+            #     curve.weights = ind[1]  # second element is weights
             #     curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
             #     nurbs_offspring.append(curve)
 
@@ -551,7 +555,7 @@ class EvolutionaryPathPlanner:
             # Check selection process
             selection_before = copy.deepcopy(population + offspring)
             population[:] = self.toolbox.select(population + offspring, len(population))
-            print_individuals_change(selection_before, population, "Selection")
+            # print_individuals_change(selection_before, population, "Selection")
 
             # Get the current Pareto front
             current_pareto_front = tools.sortNondominated(population, len(population), first_front_only=True)[0]
@@ -588,7 +592,30 @@ class EvolutionaryPathPlanner:
         plt.xlabel("Objective 1")
         plt.ylabel("Objective 2")
         plt.legend()
+        plt.savefig(os.path.join(IMAGE_DIRECTORY, 'pareto_plot.png'))
         plt.show()
+        plt.close()
+
+        # Extract the final Pareto front
+        final_pareto_front = all_pareto_fronts[-1]
+
+        # Plot paths from final Pareto front
+        nurbs_pareto = []
+        for ind in final_pareto_front:
+            curve = NURBS.Curve()
+            curve.degree = 3
+            curve.ctrlpts = ind[0]  # first element is control points
+            curve.weights = ind[1]  # second element is weights
+            curve.knotvector = utils.generate_knot_vector(curve.degree, len(curve.ctrlpts))
+            nurbs_pareto.append(curve)
+
+        # Plot paths at certain generations
+        self.env.plot_paths_on_environment(nurbs_pareto, is_nurbs=True)
+        plt.savefig(os.path.join(IMAGE_DIRECTORY, 'final_pareto_paths.png'))
+        plt.show()
+        plt.close()
+
+        
 
         return population
 
@@ -599,93 +626,78 @@ class EvolutionaryPathPlanner:
 def main():
     
     
+    # Flag to determine whether to generate new environment and paths
+    generate_new = False
 
-    """
-    print("Initializing environment...")
-    env = PathPlanningEnvironment(100, 100, 1)  
+    if generate_new:
+        print("Initializing environment...")
+        env = PathPlanningEnvironment(100, 100, 1)
 
-    print("Creating random obstacles...")
-    # fixed_obstacles = [(5, 5, 1), (15, 15, 1)]  # Fixed obstacles for consistent output
-    # env.set_fixed_obstacles(fixed_obstacles)
-    num_obstacles_range = (5, 15)
-    obstacle_radius_range = (1, 5)
-    env.create_random_obstacles(num_obstacles_range, obstacle_radius_range)
+        print("Creating random obstacles...")
+        num_obstacles_range = (10, 15)
+        obstacle_radius_range = (1, 5)
+        env.create_random_obstacles(num_obstacles_range, obstacle_radius_range)
 
-    # Visualize the environment
-    # env.plot_environment()
+        print("Converting to graph...")
+        G = env.convert_to_graph()
 
-    # Generate and visualize the graph
-    print("Converting to graph...")
-    G = env.convert_to_graph()
-    # env.visualize_graph(G)
+        print("Finding shortest paths...")
+        start = (0, 0)
+        goal = (99, 99)
+        K = 100  # Number of paths to find
+        paths = env.yen_k_shortest_paths(start, goal, K)
 
-    print("Finding shortest paths...")
-    # Define start and goal points
-    start = (0, 0)
-    goal = (99, 99)
+        print("Converting shortest paths to NURBS curves...")
+        yen_nurbs_paths = [env.convert_path_to_nurbs(path) for path in paths]
 
-    # Find multiple shortest paths using Yen's K Shortest Paths Algorithm
-    K = 10  # Number of paths to find
-    paths = env.yen_k_shortest_paths(start, goal, K)
+        print("Finding random paths...")
+        num_random_paths = 400
+        num_control_points = 50
+        noise_variance = 10
+        random_paths = env.generate_random_paths(start, goal, num_random_paths, num_control_points, noise_variance)
 
-    # # Convert paths to NURBS curves
-    print("Converting shortest paths to NURBS curves...")
-    yen_nurbs_paths = [env.convert_path_to_nurbs(path) for path in paths]
+        print("Converting random paths to NURBS curves...")
+        random_nurbs_paths = [env.convert_path_to_nurbs(path, is_grid_coords=False) for path in random_paths]
 
+        combined_nurbs_paths = yen_nurbs_paths + random_nurbs_paths
+        
+        # Save the environment and paths to files
+        with open('path_planning_environment1000.pkl', 'wb') as file:
+            pickle.dump(env, file)
+        with open('nurbs_paths1000.pkl', 'wb') as file:
+            pickle.dump(combined_nurbs_paths, file)
+    
+        print("New environment and NURBS paths saved.")
 
-    # Generate and convert random paths to NURBS curves
-    print("Finding random paths...")
-    num_random_paths = 5
-    num_control_points = 10
-    noise_variance = 10
-    random_paths = env.generate_random_paths(start, goal, num_random_paths, num_control_points, noise_variance)
-
-    print("Converting random paths to NURBS curves...")
-    random_nurbs_paths = [env.convert_path_to_nurbs(path, is_grid_coords=False) for path in random_paths]
-
-    combined_nurbs_paths = yen_nurbs_paths + random_nurbs_paths
-
-    # Save the environment to a file
-    with open('path_planning_environment.pkl', 'wb') as file:
-        pickle.dump(env, file)
-
-    print("Environment saved to 'path_planning_environment.pkl'")
-
-    with open('nurbs_paths.pkl', 'wb') as file:
-        pickle.dump(combined_nurbs_paths, file)
-
-    print("NURBS paths saved to 'nurbs_paths.pkl'")
-
-    # # Plot all paths on the environment
-    # if paths:
-    #     # Plot the NURBS paths
-    #     env.plot_paths_on_environment(combined_nurbs_paths, is_nurbs=True)
-    #     # Plot the grid paths
-    #     env.plot_paths_on_environment(paths)
-
-    # else:
-    #     print("No paths found")
-
-    """
-
-    # Saved initial population for debugging
-    if os.path.exists('path_planning_environment.pkl'):
-        print("Loading environment from 'path_planning_environment.pkl'...")
-        with open('path_planning_environment.pkl', 'rb') as file:
+    else:
+        # Check if the saved files exist
+        if not (os.path.exists('path_planning_environment1000.pkl') and os.path.exists('nurbs_paths1000.pkl')):
+            raise FileNotFoundError("Saved files not found. Please generate new environment and paths.")
+        # Load existing environment and paths
+        with open('path_planning_environment1000.pkl', 'rb') as file:
             env = pickle.load(file)
+        with open('nurbs_paths1000.pkl', 'rb') as file:
+            combined_nurbs_paths = pickle.load(file)
 
-        # Also load the combined NURBS paths if they exist
-        if os.path.exists('nurbs_paths.pkl'):
-            with open('nurbs_paths.pkl', 'rb') as file:
-                combined_nurbs_paths = pickle.load(file)
+        print("Environment and NURBS paths loaded from saved files.")
 
+
+    # Plot and save empty environment
+    env.plot_environment()
+    plt.savefig(os.path.join(IMAGE_DIRECTORY, 'environment_plot.png'))
+    plt.show()
+    plt.close()
+
+    # Plot and save initial population on environment
     env.plot_paths_on_environment(combined_nurbs_paths, is_nurbs=True)
+    plt.savefig(os.path.join(IMAGE_DIRECTORY, 'initial_paths.png'))
+    plt.show()
+    plt.close()
 
     # Initialize the evolutionary path planner
     print("Initializing evolutionary path planner...")
     crossover_prob = 0.7  # Example crossover probability
-    mutation_prob = 0.2   # Example mutation probability
-    epp = EvolutionaryPathPlanner(env, crossover_prob, mutation_prob)
+    epp = EvolutionaryPathPlanner(env, crossover_prob)
 
     initial_population = []
     for nurbs_curve in combined_nurbs_paths:
