@@ -150,19 +150,6 @@ At every Generation of new individuals, the population is maintained at a consta
 
 
 
-<!-- CONTACT -->
-## Contact
-
-Ashwin Raju (Team Lead) - [@linkein](https://www.linkedin.com/in/rajuashwin/) - Ashwin.Raju@colorado.edu
-
-Carlos Chavez (Team Member) - Carlos.Chavez@colorado.edu
-
-Project Link: [https://github.com/ashwinraju8/MO-PATHWISE?tab=readme-ov-file](https://github.com/ashwinraju8/MO-PATHWISE?tab=readme-ov-file)
-
-<p align="right">(<a href="#readme-top">back to top</a>)</p>
-
-
-
 <!-- ACKNOWLEDGMENTS -->
 ## Acknowledgments
 <p>
