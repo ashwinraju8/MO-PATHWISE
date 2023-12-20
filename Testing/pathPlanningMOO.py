@@ -287,7 +287,7 @@ class PathPlanningEnvironment:
             # Plot the path or NURBS curve
             ax.plot(x_coords, y_coords, color=color, linewidth=2, label=f'Path {idx + 1}')
 
-        # ax.legend()
+        ax.legend()
 
 
 
@@ -335,6 +335,17 @@ class EvolutionaryPathPlanner:
         ctrlpts_x, ctrlpts_y = zip(*ctrlpts)  # Unpack control points into x and y lists
         sigmaxy_x, sigmaxy_y = sigmaxy  # Unpack sigmaxy into x and y lists
 
+        # Plot paths from final Pareto front
+        nurbs_mutation = []
+        curveBefore = NURBS.Curve()
+        curveBefore.degree = 3
+        curveBefore.ctrlpts = ctrlpts 
+        curveBefore.weights = weights
+        curveBefore.knotvector = utils.generate_knot_vector(curveBefore.degree, len(curveBefore.ctrlpts))
+        nurbs_mutation.append(curveBefore)
+
+        
+
         # Calculate mutation parameters
         D = 3 * n_control_points - 4  # Dimensionality
         l = 0.5  # Hyperparameter
@@ -367,6 +378,19 @@ class EvolutionaryPathPlanner:
         # Update the individual with mutated values
         mutated_ctrlpts = list(zip(mutated_ctrlpts_x, mutated_ctrlpts_y))
         individual[:] = [mutated_ctrlpts, mutated_weights, (mutated_sigmaxy_x, mutated_sigmaxy_y), mutated_sigmaw]
+
+        # Plot paths from final Pareto front
+        curveAfter = NURBS.Curve()
+        curveAfter.degree = 3
+        curveAfter.ctrlpts = mutated_ctrlpts
+        curveAfter.weights = mutated_weights
+        curveAfter.knotvector = utils.generate_knot_vector(curveAfter.degree, len(curveAfter.ctrlpts))
+        nurbs_mutation.append(curveAfter)
+
+        # # Plot paths at certain generations
+        # self.env.plot_paths_on_environment(nurbs_mutation, is_nurbs=True)
+        # plt.show()
+        # plt.close()
 
     def distance_to_nearest_obstacle(self, curve, num_samples=100):
         min_distance = float('inf')
@@ -457,8 +481,8 @@ class EvolutionaryPathPlanner:
         safety_distance = self.distance_to_nearest_obstacle(curve)
         inverted_safety_distance = 1 / safety_distance if safety_distance != 0 else float('inf')  # Avoid division by zero
 
-        # return distance, inverted_smoothness
-        return distance, inverted_safety_distance
+        return distance, inverted_smoothness
+        # return distance, inverted_safety_distance
     
     def run_evolution(self, initial_population, max_generations, no_improve_limit):
         # Ensure population size is divisible by 4 for selTournamentDCD
@@ -644,14 +668,14 @@ def main():
         print("Finding shortest paths...")
         start = (0, 0)
         goal = (99, 99)
-        K = 100  # Number of paths to find
+        K = 10  # Number of paths to find
         paths = env.yen_k_shortest_paths(start, goal, K)
 
         print("Converting shortest paths to NURBS curves...")
         yen_nurbs_paths = [env.convert_path_to_nurbs(path) for path in paths]
 
         print("Finding random paths...")
-        num_random_paths = 400
+        num_random_paths = 6
         num_control_points = 50
         noise_variance = 10
         random_paths = env.generate_random_paths(start, goal, num_random_paths, num_control_points, noise_variance)
@@ -662,21 +686,21 @@ def main():
         combined_nurbs_paths = yen_nurbs_paths + random_nurbs_paths
         
         # Save the environment and paths to files
-        with open('path_planning_environment1000.pkl', 'wb') as file:
+        with open('path_planning_environment16.pkl', 'wb') as file:
             pickle.dump(env, file)
-        with open('nurbs_paths1000.pkl', 'wb') as file:
+        with open('nurbs_paths16.pkl', 'wb') as file:
             pickle.dump(combined_nurbs_paths, file)
     
         print("New environment and NURBS paths saved.")
 
     else:
         # Check if the saved files exist
-        if not (os.path.exists('path_planning_environment1000.pkl') and os.path.exists('nurbs_paths1000.pkl')):
+        if not (os.path.exists('path_planning_environment16.pkl') and os.path.exists('nurbs_paths16.pkl')):
             raise FileNotFoundError("Saved files not found. Please generate new environment and paths.")
         # Load existing environment and paths
-        with open('path_planning_environment1000.pkl', 'rb') as file:
+        with open('path_planning_environment16.pkl', 'rb') as file:
             env = pickle.load(file)
-        with open('nurbs_paths1000.pkl', 'rb') as file:
+        with open('nurbs_paths16.pkl', 'rb') as file:
             combined_nurbs_paths = pickle.load(file)
 
         print("Environment and NURBS paths loaded from saved files.")
